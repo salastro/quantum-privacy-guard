@@ -5,37 +5,73 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-# Find liboqs
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBOQS REQUIRED liboqs)
+# ── Find liboqs ──────────────────────────────────────────────────────────────
 
-# Set source files
-set(SOURCE_FILES
-    src/qpg.c
-    src/qpg_crypto.c
-    src/qpg_utils.c)
+# Try find_package first (CMake config mode), then fall back to pkg-config.
+find_package(liboqs CONFIG QUIET)
 
-# Define the executable
-add_executable(qpg ${SOURCE_FILES})
+if(liboqs_FOUND)
+    message(STATUS "Found liboqs via CMake config")
+    set(OQS_LIBRARIES OQS::oqs)
+    set(OQS_INCLUDE_DIRS "")
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(OQS REQUIRED liboqs>=0.8.0)
+    message(STATUS "Found liboqs via pkg-config: ${OQS_VERSION}")
+endif()
 
-# Include directories
-target_include_directories(qpg PRIVATE include ${LIBOQS_INCLUDE_DIRS})
+# ── Find OpenSSL ─────────────────────────────────────────────────────────────
 
-# Link libraries
-target_link_libraries(qpg ${LIBOQS_LIBRARIES})
+find_package(OpenSSL REQUIRED)
+message(STATUS "Found OpenSSL ${OPENSSL_VERSION}")
 
-# Set compiler options
-target_compile_options(qpg PRIVATE ${LIBOQS_CFLAGS_OTHER})
+# ── Library (shared between the binary and tests) ────────────────────────────
 
-# Set linker options
-target_link_libraries(qpg PRIVATE ${LIBOQS_LDFLAGS_OTHER})
+set(QPG_LIB_SOURCES
+    src/cli.c
+    src/crypto_kem.c
+    src/crypto_sig.c
+    src/encryption.c
+    src/file_io.c
+    src/utils.c
+)
 
-# Installation
-install(TARGETS qpg
-        RUNTIME DESTINATION bin)
+add_library(qpg_lib STATIC ${QPG_LIB_SOURCES})
 
-# Unit tests (optional)
-option(BUILD_TESTS "Build unit tests" OFF)
+target_include_directories(qpg_lib
+    PUBLIC  ${CMAKE_SOURCE_DIR}/include
+    PRIVATE ${OQS_INCLUDE_DIRS}
+)
+
+target_link_libraries(qpg_lib
+    PUBLIC  ${OQS_LIBRARIES}
+            OpenSSL::Crypto
+)
+
+if(OQS_CFLAGS_OTHER)
+    target_compile_options(qpg_lib PRIVATE ${OQS_CFLAGS_OTHER})
+endif()
+
+# ── Main executable ──────────────────────────────────────────────────────────
+
+add_executable(qpg src/main.c)
+target_link_libraries(qpg PRIVATE qpg_lib)
+
+# ── Installation ─────────────────────────────────────────────────────────────
+
+install(TARGETS qpg RUNTIME DESTINATION bin)
+
+# ── Compiler warnings ────────────────────────────────────────────────────────
+
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(qpg_lib PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(qpg     PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+# ── Tests (opt-in with -DBUILD_TESTS=ON) ─────────────────────────────────────
+
+option(BUILD_TESTS "Build the QPG test suite" OFF)
+
 if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
