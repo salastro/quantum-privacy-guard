@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 project(quantum_privacy_guard C)
 
 set(CMAKE_C_STANDARD 11)
@@ -8,16 +8,18 @@ set(CMAKE_C_EXTENSIONS OFF)
 # ── Find liboqs ──────────────────────────────────────────────────────────────
 
 # Try find_package first (CMake config mode), then fall back to pkg-config.
-find_package(liboqs CONFIG QUIET)
+# Both paths yield an imported target that carries include dirs, link dirs and
+# compile flags to everything linking qpg_lib.
+find_package(liboqs 0.8.0 CONFIG QUIET)
 
 if(liboqs_FOUND)
-    message(STATUS "Found liboqs via CMake config")
-    set(OQS_LIBRARIES OQS::oqs)
-    set(OQS_INCLUDE_DIRS "")
+    message(STATUS "Found liboqs via CMake config: ${liboqs_VERSION}")
+    set(OQS_TARGET OQS::oqs)
 else()
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(OQS REQUIRED liboqs>=0.8.0)
+    pkg_check_modules(OQS REQUIRED IMPORTED_TARGET liboqs>=0.8.0)
     message(STATUS "Found liboqs via pkg-config: ${OQS_VERSION}")
+    set(OQS_TARGET PkgConfig::OQS)
 endif()
 
 # ── Find OpenSSL ─────────────────────────────────────────────────────────────
@@ -40,17 +42,12 @@ add_library(qpg_lib STATIC ${QPG_LIB_SOURCES})
 
 target_include_directories(qpg_lib
     PUBLIC  ${CMAKE_SOURCE_DIR}/include
-    PRIVATE ${OQS_INCLUDE_DIRS}
 )
 
 target_link_libraries(qpg_lib
-    PUBLIC  ${OQS_LIBRARIES}
+    PUBLIC  ${OQS_TARGET}
             OpenSSL::Crypto
 )
-
-if(OQS_CFLAGS_OTHER)
-    target_compile_options(qpg_lib PRIVATE ${OQS_CFLAGS_OTHER})
-endif()
 
 # ── Main executable ──────────────────────────────────────────────────────────
 
