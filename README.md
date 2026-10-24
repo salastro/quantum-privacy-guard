@@ -6,8 +6,8 @@ QPG provides:
 
 - **Key Encapsulation (KEM)** — ML-KEM / Kyber and all other liboqs-supported KEM algorithms.
 - **Digital Signatures** — ML-DSA / Dilithium, Falcon, SPHINCS+, and more.
-- **Hybrid file encryption** — Ephemeral KEM encapsulation → SHA-256 key derivation → AES-256-GCM.
-- **Forward secrecy** — Every encryption uses a fresh ephemeral KEM key pair; shared secrets are never reused.
+- **Hybrid file encryption** — KEM encapsulation to the recipient's public key → SHA-256 key derivation → AES-256-GCM.
+- **Per-file keys** — Every encryption encapsulates a fresh shared secret, so no two files share an AES key.
 
 ---
 
@@ -31,7 +31,7 @@ QPG provides:
 | Dependency | Minimum version |
 |------------|-----------------|
 | C compiler | C11-capable (GCC ≥ 7, Clang ≥ 5) |
-| CMake      | ≥ 3.0 |
+| CMake      | ≥ 3.10 |
 | liboqs     | ≥ 0.8.0 |
 | OpenSSL    | ≥ 1.1.0 (for AES-256-GCM) |
 
@@ -195,7 +195,7 @@ Keys are stored in a compact binary format with a metadata header:
 - **Memory zeroization** of all private keys, shared secrets, and symmetric keys after use (volatile memset to prevent dead-store elimination).
 - **AES-256-GCM authenticated encryption** — tampering is detected.
 - **Constant-time comparison** for signature verification paths.
-- **Ephemeral KEM encapsulation** — each encryption generates a fresh shared secret (forward secrecy).
+- **Fresh KEM encapsulation per file** — each encryption generates a new shared secret and AES key.
 - **Strict validation** of all file formats, key types, and algorithm compatibility.
 
 ### ⚠️ Security Disclaimer
@@ -204,6 +204,10 @@ Keys are stored in a compact binary format with a metadata header:
 > While QPG implements them using the well-audited liboqs library, **use this tool at your own risk** for production workloads.
 > No formal security audit has been performed on this codebase.
 > Always keep your private keys secure and back them up.
+
+### No forward secrecy
+
+Files are encrypted to the recipient's long-term KEM public key. Anyone who later obtains that private key can decrypt every file ever encrypted to it. If a private key may have been exposed, generate a new key pair, and re-encrypt any files that still need protecting.
 
 ---
 
